@@ -1,38 +1,203 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AmapViewer from '@/components/map/AmapViewer.vue'
-import { fetchPublicGeoPlaces } from '@/api/public'
-import type { GeoPlace, GeoPlaceType } from '@/types'
+import { fetchPublicGeoPlaces, fetchPublicResidences } from '@/api/public'
+import type { GeoPlace, GeoPlaceType, Residence } from '@/types'
 import { usePortalStore } from '@/stores/portal'
+import {
+  buildMapReturnQuery,
+  savePortalReturn,
+  type MapFilterType,
+} from '@/utils/portalReturn'
 
+const route = useRoute()
+const router = useRouter()
 const portalStore = usePortalStore()
 const loading = ref(false)
 const places = ref<GeoPlace[]>([])
+const residences = ref<Residence[]>([])
 const filterType = ref<GeoPlaceType | 'all'>('all')
 const mapReadyToShow = ref(false)
 const selectedPlaceId = ref<number | null>(null)
+const personSearchText = ref('')
+const pendingFocusPersonId = ref<number | null>(null)
 const viewerRef = ref<{
   fitAll: () => void
   focusPlace: (id: number) => boolean
 } | null>(null)
 
+interface ResidenceSuggestion {
+  value: string
+  residence: Residence
+}
+
+/** 住宅点使用负 ID，避免与 geo_places.id 冲突 */
+function residenceToMarker(item: Residence): GeoPlace {
+  return {
+    id: -item.id,
+    family_id: 0,
+    place_type: 'residence',
+    name: item.name,
+    longitude: item.longitude,
+    latitude: item.latitude,
+    address: item.address,
+    description: item.nickname ? `小名：${item.nickname}` : null,
+    related_person_id: item.id,
+    created_at: '',
+    updated_at: '',
+  }
+}
+
+function residenceLabel(item: Residence) {
+  const parts = [item.name]
+  if (item.nickname) parts.push(`（${item.nickname}）`)
+  if (item.generation != null) parts.push(`· 第${item.generation}世`)
+  return parts.join(' ')
+}
+
 const typeText: Record<GeoPlaceType, string> = {
   distribution: '族群分布',
   cemetery: '坟地',
+  residence: '住宅',
 }
 
+const allMapPlaces = computed(() => [
+  ...places.value,
+  ...residences.value.map(residenceToMarker),
+])
+
 const filteredPlaces = computed(() => {
-  if (filterType.value === 'all') return places.value
-  return places.value.filter((item) => item.place_type === filterType.value)
+  if (filterType.value === 'all') return allMapPlaces.value
+  return allMapPlaces.value.filter((item) => item.place_type === filterType.value)
 })
+
+function matchResidences(keyword: string): Residence[] {
+  const q = keyword.trim()
+  if (!q) return [...residences.value]
+  return residences.value.filter(
+    (item) => item.name.includes(q) || (item.nickname && item.nickname.includes(q)),
+  )
+}
+
+function queryResidenceSuggestions(
+  queryString: string,
+  cb: (suggestions: ResidenceSuggestion[]) => void,
+) {
+  const items = matchResidences(queryString)
+  cb(
+    items.map((residence) => ({
+      value: residenceLabel(residence),
+      residence,
+    })),
+  )
+}
+
+function focusResidence(residence: Residence) {
+  filterType.value = 'residence'
+  personSearchText.value = residenceLabel(residence)
+  handlePlaceClick(residenceToMarker(residence))
+  syncMapQuery(residence.id)
+}
+
+function handleResidencePick(item: ResidenceSuggestion) {
+  focusResidence(item.residence)
+}
+
+function handleResidenceClear() {
+  personSearchText.value = ''
+  selectedPlaceId.value = null
+  syncMapQuery()
+}
+
+function searchAndFocusResidence() {
+  const text = personSearchText.value.trim()
+  if (!text) {
+    ElMessage.warning('请输入姓名或小名')
+    return
+  }
+  const matched = matchResidences(text)
+  if (!matched.length) {
+    ElMessage.info('未找到有住宅坐标的匹配人物')
+    return
+  }
+  const exact =
+    matched.find((item) => item.name === text || item.nickname === text) ?? matched[0]
+  focusResidence(exact)
+}
+
+function syncMapQuery(personId?: number) {
+  const query = buildMapReturnQuery({
+    source: 'map',
+    filterType: filterType.value as MapFilterType,
+    searchText: personSearchText.value || undefined,
+    selectedPlaceId: selectedPlaceId.value,
+    personId:
+      personId ??
+      (selectedPlaceId.value != null && selectedPlaceId.value < 0
+        ? -selectedPlaceId.value
+        : undefined),
+  })
+  router.replace({ path: '/portal/map', query })
+}
+
+function applyRouteState() {
+  const qFilter = route.query.filter
+  if (
+    typeof qFilter === 'string' &&
+    ['distribution', 'cemetery', 'residence', 'all'].includes(qFilter)
+  ) {
+    filterType.value = qFilter as GeoPlaceType | 'all'
+  }
+  const qSearch = route.query.q
+  if (typeof qSearch === 'string') {
+    personSearchText.value = qSearch
+  }
+  const qPerson = route.query.person_id
+  if (typeof qPerson === 'string' && qPerson) {
+    const id = Number(qPerson)
+    if (!Number.isNaN(id)) {
+      pendingFocusPersonId.value = id
+    }
+  }
+}
+
+function tryFocusPendingPerson() {
+  const personId = pendingFocusPersonId.value
+  if (personId == null || !residences.value.length) return
+  const residence = residences.value.find((item) => item.id === personId)
+  if (!residence) return
+  pendingFocusPersonId.value = null
+  nextTick(() => {
+    focusResidence(residence)
+  })
+}
+
+function openPersonFromMap(personId: number) {
+  savePortalReturn({
+    source: 'map',
+    filterType: filterType.value as MapFilterType,
+    searchText: personSearchText.value || undefined,
+    selectedPlaceId: selectedPlaceId.value,
+    personId,
+  })
+  syncMapQuery(personId)
+  router.push(`/portal/person/${personId}`)
+}
 
 async function loadPlaces() {
   loading.value = true
   try {
     await portalStore.ensureFamily()
-    places.value = await fetchPublicGeoPlaces()
+    const [geoList, residenceList] = await Promise.all([
+      fetchPublicGeoPlaces(),
+      fetchPublicResidences(),
+    ])
+    places.value = geoList
+    residences.value = residenceList
     mapReadyToShow.value = true
+    tryFocusPendingPerson()
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '加载地理标记失败')
   } finally {
@@ -56,7 +221,14 @@ function handlePlaceClick(place: GeoPlace) {
   }
 }
 
-onMounted(loadPlaces)
+watch(filterType, () => {
+  syncMapQuery()
+})
+
+onMounted(() => {
+  applyRouteState()
+  loadPlaces()
+})
 </script>
 
 <template>
@@ -64,19 +236,41 @@ onMounted(loadPlaces)
     <div class="toolbar">
       <div>
         <h1 class="title">族人分布地图</h1>
-        <p class="subtitle">查看族群分布与坟地位置 · 可拖拽、滚轮缩放 · 点击列表可定位到地图</p>
+        <p class="subtitle">族群分布、坟地与族人住宅 · 可拖拽缩放 · 点击列表定位</p>
       </div>
       <div class="actions">
         <el-radio-group v-model="filterType" size="small">
           <el-radio-button value="all">全部</el-radio-button>
           <el-radio-button value="distribution">族群分布</el-radio-button>
           <el-radio-button value="cemetery">坟地</el-radio-button>
+          <el-radio-button value="residence">住宅</el-radio-button>
         </el-radio-group>
+        <div class="person-search">
+          <el-autocomplete
+            v-model="personSearchText"
+            :fetch-suggestions="queryResidenceSuggestions"
+            placeholder="检索住宅：姓名或小名"
+            clearable
+            style="width: 240px"
+            @select="handleResidencePick"
+            @clear="handleResidenceClear"
+            @keyup.enter="searchAndFocusResidence"
+          >
+            <template #default="{ item }">
+              <div class="suggest-row">
+                <span>{{ item.value }}</span>
+                <span v-if="item.residence.address" class="suggest-addr">{{ item.residence.address }}</span>
+              </div>
+            </template>
+          </el-autocomplete>
+          <el-button size="small" @click="searchAndFocusResidence">查询</el-button>
+        </div>
         <el-button size="small" @click="handleFitAll">适应全部</el-button>
         <el-button size="small" :loading="loading" @click="loadPlaces">刷新</el-button>
         <div class="legend">
           <span class="dot distribution" />族群分布
           <span class="dot cemetery" />坟地
+          <span class="dot residence" />住宅
         </div>
       </div>
     </div>
@@ -87,6 +281,7 @@ onMounted(loadPlaces)
           v-if="mapReadyToShow"
           ref="viewerRef"
           :places="filteredPlaces"
+          @open-person="openPersonFromMap"
         />
         <div v-else class="map-placeholder">地图加载中…</div>
       </div>
@@ -153,6 +348,25 @@ onMounted(loadPlaces)
   justify-content: flex-end;
 }
 
+.person-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.suggest-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.35;
+  padding: 2px 0;
+}
+
+.suggest-addr {
+  font-size: 12px;
+  color: #8a9690;
+}
+
 .legend {
   display: flex;
   align-items: center;
@@ -175,6 +389,10 @@ onMounted(loadPlaces)
 
 .dot.cemetery {
   background: #8b5a2b;
+}
+
+.dot.residence {
+  background: #2f6b9a;
 }
 
 .map-layout {
@@ -279,6 +497,11 @@ onMounted(loadPlaces)
 .badge.cemetery {
   background: rgba(139, 90, 43, 0.12);
   color: #8b5a2b;
+}
+
+.badge.residence {
+  background: rgba(47, 107, 154, 0.12);
+  color: #2f6b9a;
 }
 
 .place-meta,

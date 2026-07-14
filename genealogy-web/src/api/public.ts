@@ -6,6 +6,7 @@ import type {
   Person,
   PersonListResult,
   PersonRelations,
+  Residence,
   TreeGraph,
 } from '@/types'
 
@@ -68,4 +69,8 @@ export function fetchPublicPersonTree(params: {
 
 export function fetchPublicGeoPlaces(params?: { place_type?: GeoPlaceType }) {
   return apiGet<GeoPlace[]>('/api/public/geo-places', params)
+}
+
+export function fetchPublicResidences() {
+  return apiGet<Residence[]>('/api/public/residences')
 }

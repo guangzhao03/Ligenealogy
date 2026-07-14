@@ -100,6 +100,13 @@ def list_public_geo_places(
     return success([item.model_dump() for item in items])
 
 
+@router.get("/residences")
+def list_public_residences(db: DbDep, optional_user: OptionalUserDep):
+    public_service.assert_public_access(optional_user)
+    items = public_service.list_residences(db)
+    return success([item.model_dump() for item in items])
+
+
 @router.get("/tree/person")
 def get_public_person_tree(
     db: DbDep,

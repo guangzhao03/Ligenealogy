@@ -36,6 +36,8 @@ export interface Person {
   birthplace: string | null
   phone: string | null
   address: string | null
+  address_lng: number | null
+  address_lat: number | null
   biography: string | null
   remark: string | null
   is_alive: number
@@ -101,7 +103,7 @@ export interface ImportResult {
   errors: Array<{ row: number; message: string }>
 }
 
-export type GeoPlaceType = 'distribution' | 'cemetery'
+export type GeoPlaceType = 'distribution' | 'cemetery' | 'residence'
 
 export interface GeoPlace {
   id: number
@@ -115,4 +117,14 @@ export interface GeoPlace {
   related_person_id: number | null
   created_at: string
   updated_at: string
+}
+
+export interface Residence {
+  id: number
+  name: string
+  nickname: string
+  address: string | null
+  longitude: number
+  latitude: number
+  generation: number | null
 }

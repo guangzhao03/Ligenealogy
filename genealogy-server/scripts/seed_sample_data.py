@@ -49,6 +49,8 @@ def add_person(
     birthplace: str | None = None,
     phone: str | None = None,
     address: str | None = None,
+    address_lng: float | None = None,
+    address_lat: float | None = None,
     biography: str | None = None,
     remark: str | None = None,
     is_alive: int = 1,
@@ -63,6 +65,8 @@ def add_person(
         birthplace=birthplace,
         phone=phone,
         address=address,
+        address_lng=address_lng,
+        address_lat=address_lat,
         biography=biography,
         remark=remark,
         is_alive=is_alive,
@@ -93,6 +97,46 @@ def add_spouse(db, family_id: int, a: Person, b: Person) -> None:
             relation_type=RelationType.spouse.value,
         )
     )
+
+
+# 在世族人示例住址（新乡/郑州一带，坐标微调避免重叠）
+_ALIVE_HOMES: list[tuple[str, float, float]] = [
+    ("河南新乡卫滨区平原镇李庄 12 号", 113.852000, 35.303000),
+    ("河南新乡牧野区建设路 88 号", 113.875200, 35.312400),
+    ("河南新乡红旗区劳动路 56 号", 113.883500, 35.298800),
+    ("河南郑州市金水区文化路 120 号", 113.665800, 34.787200),
+    ("河南郑州市二七区大学路 45 号", 113.640200, 34.736500),
+    ("河南新乡凤泉区宝山路 33 号", 113.920100, 35.384600),
+    ("河南新乡卫滨区人民路 210 号", 113.860400, 35.303800),
+    ("河南郑州市中原区建设路 78 号", 113.613500, 34.747200),
+    ("河南新乡牧野区东风路 15 号", 113.890200, 35.320100),
+    ("河南新乡红旗区和平大道 99 号", 113.905600, 35.291400),
+]
+
+
+def apply_sample_addresses(db, family_id: int) -> None:
+    """为全员写入现住址；在世人物附带经纬度供地图住宅图层联调。"""
+    persons = list(
+        db.scalars(
+            select(Person)
+            .where(Person.family_id == family_id)
+            .order_by(Person.generation.asc(), Person.id.asc())
+        ).all()
+    )
+    alive_index = 0
+    for person in persons:
+        if person.is_alive:
+            address, lng, lat = _ALIVE_HOMES[alive_index % len(_ALIVE_HOMES)]
+            # 同址复用时做微小偏移，避免标记完全重叠
+            offset = alive_index // len(_ALIVE_HOMES)
+            person.address = address
+            person.address_lng = round(lng + offset * 0.003 + (alive_index % 3) * 0.001, 6)
+            person.address_lat = round(lat + offset * 0.002 + (alive_index % 2) * 0.0008, 6)
+            alive_index += 1
+        else:
+            person.address = person.birthplace or "河南省南阳市（祖居）"
+            person.address_lng = None
+            person.address_lat = None
 
 
 def seed_li_family(db, family_id: int) -> tuple[int, int]:
@@ -299,7 +343,6 @@ def seed_li_family(db, family_id: int) -> tuple[int, int]:
         generation=5,
         birth_year=1975,
         phone="13800001111",
-        address="河南新乡卫滨区平原镇李庄 12 号",
         is_alive=1,
     )
     g5_b = add_person(
@@ -311,7 +354,6 @@ def seed_li_family(db, family_id: int) -> tuple[int, int]:
         generation=5,
         birth_year=1978,
         phone="13900002222",
-        address="河南新乡牧野区建设路 88 号",
         is_alive=1,
     )
     g5_c = add_person(
@@ -385,6 +427,8 @@ def seed_li_family(db, family_id: int) -> tuple[int, int]:
     add_parent(db, family_id, g5_a, g6_a)
     add_parent(db, family_id, g5_a, g6_b)
     add_parent(db, family_id, g5_b, g6_c)
+
+    apply_sample_addresses(db, family_id)
 
     # 地理标记示例（河南南阳一带坐标，便于地图联调）
     db.add(

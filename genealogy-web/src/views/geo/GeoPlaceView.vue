@@ -35,6 +35,7 @@ const hasFamily = computed(() => !!familyStore.currentFamily)
 const typeText: Record<GeoPlaceType, string> = {
   distribution: '族群分布',
   cemetery: '坟地',
+  residence: '住宅',
 }
 
 async function loadPlaces() {

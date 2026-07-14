@@ -59,12 +59,13 @@ persons *───* persons  (via person_relations)
 | birthplace | VARCHAR(100) NULL | 籍贯 |
 | phone | VARCHAR(30) NULL | 电话 |
 | address | VARCHAR(200) NULL | 现住址 |
+| address_lng / address_lat | DECIMAL(10,6) NULL | 现住址经纬度（地图住宅点） |
 | biography / remark | TEXT NULL | 简介 / 备注 |
 | is_alive | SMALLINT | 1 在世 / 0 已故 |
 | avatar_url | VARCHAR(255) NULL | 头像 URL |
 | created_at / updated_at | DATETIME | 时间戳 |
 
-迁移：`003_create_persons`，小名与出生年 `006`，联系方式 `008_add_person_contact`。
+迁移：`003_create_persons`，小名与出生年 `006`，联系方式 `008_add_person_contact`，住址坐标 `010_person_address_geo`。
 
 ### 2.4 `person_relations` 亲属关系
 

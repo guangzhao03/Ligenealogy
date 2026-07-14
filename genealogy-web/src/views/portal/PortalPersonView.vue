@@ -4,14 +4,26 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { fetchPublicPerson, fetchPublicPersonRelations } from '@/api/public'
 import type { Person, PersonRelations } from '@/types'
+import {
+  buildMapReturnQuery,
+  buildTreeReturnQuery,
+  clearPortalReturn,
+  readPortalReturn,
+  type MapReturnContext,
+  type PortalReturnContext,
+  type TreeReturnContext,
+} from '@/utils/portalReturn'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const person = ref<Person | null>(null)
 const relations = ref<PersonRelations | null>(null)
+const returnCtx = ref<PortalReturnContext | null>(null)
 
 const personId = computed(() => Number(route.params.id))
+const fromMap = computed(() => returnCtx.value?.source === 'map')
+const fromTree = computed(() => returnCtx.value?.source === 'tree')
 
 function genderLabel(gender: number) {
   if (gender === 1) return '男'
@@ -42,18 +54,61 @@ async function load() {
 }
 
 function goTree() {
+  const ctx = returnCtx.value
+  if (ctx?.source === 'tree') {
+    const treeCtx = ctx as TreeReturnContext
+    const query = buildTreeReturnQuery(
+      {
+        ...treeCtx,
+        personId: treeCtx.personId ?? personId.value,
+      },
+      personId.value,
+    )
+    clearPortalReturn()
+    router.push({ path: '/portal/tree', query })
+    return
+  }
+  // 来自地图或无回程：默认以人为中心
+  clearPortalReturn()
   router.push({
     path: '/portal/tree',
     query: { person_id: String(personId.value), mode: 'lineage' },
   })
 }
 
+function goBackToMap() {
+  const ctx = returnCtx.value
+  if (ctx?.source !== 'map') {
+    router.push('/portal/map')
+    return
+  }
+  const mapCtx = ctx as MapReturnContext
+  const query = buildMapReturnQuery({
+    ...mapCtx,
+    personId: mapCtx.personId ?? personId.value,
+  })
+  clearPortalReturn()
+  router.push({ path: '/portal/map', query })
+}
+
 function goRelated(id: number) {
+  // 亲属跳转保留回程上下文，仍可返回地图/原族谱
   router.push(`/portal/person/${id}`)
 }
 
-watch(personId, load)
-onMounted(load)
+function refreshReturnCtx() {
+  returnCtx.value = readPortalReturn()
+}
+
+watch(personId, () => {
+  refreshReturnCtx()
+  load()
+})
+
+onMounted(() => {
+  refreshReturnCtx()
+  load()
+})
 </script>
 
 <template>
@@ -72,6 +127,20 @@ onMounted(load)
             <span v-if="person.birth_year"> · {{ person.birth_year }}</span>
             <span v-if="person.death_date"> — {{ person.death_date.slice(0, 4) }}</span>
             <span v-else-if="person.is_alive === 0"> · 已故</span>
+          </p>
+          <p v-if="fromMap || fromTree" class="nav-links">
+            <a
+              v-if="fromMap"
+              href="/portal/map"
+              class="text-link"
+              @click.prevent="goBackToMap"
+            >返回地图</a>
+            <a
+              v-if="fromTree"
+              href="/portal/tree"
+              class="text-link"
+              @click.prevent="goTree"
+            >返回族谱</a>
           </p>
         </div>
         <el-button type="primary" @click="goTree">在族谱中查看</el-button>
@@ -214,6 +283,23 @@ onMounted(load)
   margin: 10px 0 0;
   color: #5a6b62;
   font-size: 14px;
+}
+
+.nav-links {
+  margin: 12px 0 0;
+  display: flex;
+  gap: 16px;
+}
+
+.text-link {
+  color: #2f6b9a;
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.text-link:hover {
+  color: #1f4f75;
 }
 
 .grid {

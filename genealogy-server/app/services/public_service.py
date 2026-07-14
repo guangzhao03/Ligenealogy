@@ -185,6 +185,33 @@ def list_geo_places(db: Session, place_type: str | None = None):
     return geo_place_service.list_places_for_family(db, family.id, place_type=place_type)
 
 
+def list_residences(db: Session):
+    from app.schemas.person import ResidenceResponse
+
+    family = get_display_family(db)
+    persons = db.scalars(
+        select(Person)
+        .where(
+            Person.family_id == family.id,
+            Person.address_lng.is_not(None),
+            Person.address_lat.is_not(None),
+        )
+        .order_by(Person.generation.asc(), Person.id.asc())
+    ).all()
+    return [
+        ResidenceResponse(
+            id=person.id,
+            name=person.name,
+            nickname=person.nickname,
+            address=person.address,
+            longitude=float(person.address_lng),
+            latitude=float(person.address_lat),
+            generation=person.generation,
+        )
+        for person in persons
+    ]
+
+
 def assert_public_access(optional_user: User | None) -> None:
     # future: require_viewer if settings.public_require_auth
     if settings.public_require_auth and optional_user is None:

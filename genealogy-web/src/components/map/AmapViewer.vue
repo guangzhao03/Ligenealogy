@@ -7,6 +7,10 @@ const props = defineProps<{
   places: GeoPlace[]
 }>()
 
+const emit = defineEmits<{
+  'open-person': [personId: number]
+}>()
+
 const containerRef = ref<HTMLDivElement>()
 const errorText = ref('')
 
@@ -25,6 +29,7 @@ let pendingFocusId: number | null = null
 const typeLabel: Record<string, string> = {
   distribution: '族群分布',
   cemetery: '坟地',
+  residence: '住宅',
 }
 
 function placeSignature(list: GeoPlace[]) {
@@ -36,13 +41,42 @@ function placeSignature(list: GeoPlace[]) {
 }
 
 function buildInfoHtml(place: GeoPlace) {
+  const personId =
+    place.place_type === 'residence' && place.related_person_id
+      ? place.related_person_id
+      : null
+  // 对标地图信息窗惯例：文字超链接，而非按钮
+  const detailLink = personId
+    ? `<div style="margin-top:10px">
+         <a class="amap-person-detail-link" data-person-id="${personId}" href="/portal/person/${personId}"
+            style="color:#2f6b9a;font-size:13px;text-decoration:underline;text-underline-offset:2px;cursor:pointer">
+           查看详细信息
+         </a>
+       </div>`
+    : ''
   return `
     <div style="min-width:180px;padding:4px 2px;line-height:1.5;text-align:left">
       <div style="font-weight:700;margin-bottom:4px">${place.name}</div>
       <div style="color:#5b6b62;font-size:12px">${typeLabel[place.place_type] || place.place_type}</div>
       ${place.address ? `<div style="margin-top:6px;font-size:13px">${place.address}</div>` : ''}
       ${place.description ? `<div style="margin-top:4px;font-size:12px;color:#6b7a71">${place.description}</div>` : ''}
+      ${detailLink}
     </div>`
+}
+
+function bindDetailLink() {
+  window.setTimeout(() => {
+    const link = document.querySelector('.amap-person-detail-link') as HTMLAnchorElement | null
+    if (!link) return
+    link.onclick = (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const personId = Number(link.dataset.personId)
+      if (!Number.isNaN(personId)) {
+        emit('open-person', personId)
+      }
+    }
+  }, 0)
 }
 
 async function initMap() {
@@ -109,11 +143,16 @@ function syncMarkers(options?: { fit?: boolean }) {
   const shouldFit = options?.fit === true || signature !== lastPlaceSignature
 
   for (const place of props.places) {
-    const isCemetery = place.place_type === 'cemetery'
+    const markerClass =
+      place.place_type === 'cemetery'
+        ? 'cemetery'
+        : place.place_type === 'residence'
+          ? 'residence'
+          : 'distribution'
     const marker = new AMap.Marker({
       position: [place.longitude, place.latitude],
       title: place.name,
-      content: `<div class="geo-marker ${isCemetery ? 'cemetery' : 'distribution'}"></div>`,
+      content: `<div class="geo-marker ${markerClass}"></div>`,
       offset: new AMap.Pixel(-10, -10),
       // 事件冒泡到地图，避免标记层抢走拖拽
       bubble: true,
@@ -144,6 +183,7 @@ function openPlace(place: GeoPlace, marker?: { getPosition: () => unknown } | nu
     ? resolved.getPosition()
     : new window.AMap.LngLat(place.longitude, place.latitude)
   infoWindow.open(map, position)
+  bindDetailLink()
 }
 
 function fitAll() {
@@ -295,5 +335,9 @@ defineExpose({
 
 :global(.geo-marker.cemetery) {
   background: #8b5a2b;
+}
+
+:global(.geo-marker.residence) {
+  background: #2f6b9a;
 }
 </style>

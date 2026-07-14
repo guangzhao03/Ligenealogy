@@ -46,6 +46,7 @@
 | GET | `/api/public/tree/lineage` | 以人为中心 |
 | GET | `/api/public/tree/person` | 统一指定人物树 |
 | GET | `/api/public/geo-places` | 地理标记列表，`place_type` 可选 |
+| GET | `/api/public/residences` | 有坐标的族人现住址（住宅点） |
 
 常用查询参数：
 

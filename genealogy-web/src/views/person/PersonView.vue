@@ -10,6 +10,7 @@ import {
   updatePerson,
 } from '@/api/person'
 import { formatPersonDisplayName } from '@/api/tree'
+import AddressSuggest from '@/components/map/AddressSuggest.vue'
 import type { Person, PersonRelations } from '@/types'
 import { useFamilyStore } from '@/stores/family'
 
@@ -40,6 +41,8 @@ const form = reactive({
   birthplace: '',
   phone: '',
   address: '',
+  address_lng: null as number | null,
+  address_lat: null as number | null,
   biography: '',
   remark: '',
   is_alive: 1,
@@ -89,6 +92,8 @@ function openCreate() {
     birthplace: '',
     phone: '',
     address: '',
+    address_lng: null,
+    address_lat: null,
     biography: '',
     remark: '',
     is_alive: 1,
@@ -98,7 +103,16 @@ function openCreate() {
 
 function openEdit(person: Person) {
   editingId.value = person.id
-  Object.assign(form, person)
+  Object.assign(form, {
+    ...person,
+    phone: person.phone || '',
+    address: person.address || '',
+    address_lng: person.address_lng ?? null,
+    address_lat: person.address_lat ?? null,
+    birthplace: person.birthplace || '',
+    biography: person.biography || '',
+    remark: person.remark || '',
+  })
   dialogVisible.value = true
 }
 
@@ -132,13 +146,21 @@ async function handleSave() {
     birth_year: form.birth_year!,
     birthplace: form.birthplace || undefined,
     phone: form.phone || undefined,
-    address: form.address || undefined,
+    address: form.address?.trim() || undefined,
+    address_lng: form.address?.trim() ? form.address_lng ?? undefined : undefined,
+    address_lat: form.address?.trim() ? form.address_lat ?? undefined : undefined,
     biography: form.biography || undefined,
     remark: form.remark || undefined,
     is_alive: form.is_alive,
   }
   if (editingId.value) {
-    await updatePerson(editingId.value, payload)
+    await updatePerson(editingId.value, {
+      ...payload,
+      // 显式清空坐标：无地址时传 null
+      address: form.address?.trim() || null,
+      address_lng: form.address?.trim() ? form.address_lng : null,
+      address_lat: form.address?.trim() ? form.address_lat : null,
+    })
     ElMessage.success('更新成功')
   } else {
     await createPerson({ ...payload, family_id: familyStore.currentFamily.id })
@@ -266,7 +288,14 @@ onMounted(loadPersons)
         </el-form-item>
         <el-form-item label="籍贯"><el-input v-model="form.birthplace" /></el-form-item>
         <el-form-item label="电话"><el-input v-model="form.phone" placeholder="选填" /></el-form-item>
-        <el-form-item label="现住址"><el-input v-model="form.address" placeholder="选填" /></el-form-item>
+        <el-form-item label="现住址">
+          <AddressSuggest
+            v-model:address="form.address"
+            v-model:longitude="form.address_lng"
+            v-model:latitude="form.address_lat"
+            placeholder="输入地址搜索，选择后自动带入坐标"
+          />
+        </el-form-item>
         <el-form-item label="简介"><el-input v-model="form.biography" type="textarea" :rows="2" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
       </el-form>

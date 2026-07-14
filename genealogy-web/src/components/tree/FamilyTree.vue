@@ -116,6 +116,29 @@ function fitView() {
   }
 }
 
+/** 仅在人物不在可视区时微调平移，不打断「适应画布」的顶对齐布局 */
+function ensurePersonVisible(personId: string | null | undefined) {
+  const stage = stageRef.value
+  if (!stage || !layout.value || !personId) return
+  const node = layout.value.nodes.find((item) => item.id === personId)
+  if (!node) return
+  focusId.value = personId
+
+  const margin = 32
+  const left = pan.value.x + node.x * zoom.value
+  const top = pan.value.y + node.y * zoom.value
+  const right = left + NODE_WIDTH * zoom.value
+  const bottom = top + NODE_HEIGHT * zoom.value
+
+  let nextX = pan.value.x
+  let nextY = pan.value.y
+  if (left < margin) nextX += margin - left
+  if (right > stage.clientWidth - margin) nextX += stage.clientWidth - margin - right
+  if (top < margin) nextY += margin - top
+  if (bottom > stage.clientHeight - margin) nextY += stage.clientHeight - margin - bottom
+  pan.value = { x: nextX, y: nextY }
+}
+
 function focusOnPerson(personId: string | null | undefined) {
   const stage = stageRef.value
   if (!stage || !layout.value || !personId) return
@@ -126,9 +149,14 @@ function focusOnPerson(personId: string | null | undefined) {
   if (zoom.value < 0.85) zoom.value = 0.85
   const centerX = node.x + NODE_WIDTH / 2
   const centerY = node.y + NODE_HEIGHT / 2
+  const relativeY = node.y / Math.max(layout.value.height, 1)
+  const padding = 48
+  // 靠近树顶的节点（如始祖）贴顶部，避免垂直居中后画面上方大片留白
+  const screenY =
+    relativeY < 0.22 ? padding + (NODE_HEIGHT * zoom.value) / 2 : stage.clientHeight / 2
   pan.value = {
     x: stage.clientWidth / 2 - centerX * zoom.value,
-    y: stage.clientHeight / 2 - centerY * zoom.value,
+    y: screenY - centerY * zoom.value,
   }
 }
 
@@ -181,8 +209,9 @@ watch(
   () => {
     const id = resolveFocusId()
     focusId.value = id
+    // 刷新/切模式：先整树顶对齐适配，再保证高亮人物可见，勿再强制居中
     fitView()
-    if (id) focusOnPerson(id)
+    if (id) ensurePersonVisible(id)
   },
   { deep: true },
 )
@@ -204,7 +233,7 @@ onMounted(() => {
   const id = resolveFocusId()
   if (id) {
     focusId.value = id
-    focusOnPerson(id)
+    ensurePersonVisible(id)
   }
   window.addEventListener('mousemove', onMouseMove)
   window.addEventListener('mouseup', onMouseUp)

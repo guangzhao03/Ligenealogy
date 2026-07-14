@@ -61,6 +61,10 @@ def update_person(
 ) -> Person:
     person = _get_owned_person(db, person_id, current_user)
     payload = data.model_dump(exclude_unset=True)
+    # 清空现住址时同步清空坐标
+    if "address" in payload and not payload.get("address"):
+        payload["address_lng"] = None
+        payload["address_lat"] = None
     for key, value in payload.items():
         setattr(person, key, value)
     db.commit()

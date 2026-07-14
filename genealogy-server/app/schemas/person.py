@@ -15,6 +15,8 @@ class PersonCreate(BaseModel):
     birthplace: str | None = Field(default=None, max_length=100)
     phone: str | None = Field(default=None, max_length=30)
     address: str | None = Field(default=None, max_length=200)
+    address_lng: float | None = Field(default=None, ge=-180, le=180)
+    address_lat: float | None = Field(default=None, ge=-90, le=90)
     biography: str | None = None
     remark: str | None = None
     is_alive: int = Field(default=1, ge=0, le=1)
@@ -32,6 +34,8 @@ class PersonUpdate(BaseModel):
     birthplace: str | None = Field(default=None, max_length=100)
     phone: str | None = Field(default=None, max_length=30)
     address: str | None = Field(default=None, max_length=200)
+    address_lng: float | None = Field(default=None, ge=-180, le=180)
+    address_lat: float | None = Field(default=None, ge=-90, le=90)
     biography: str | None = None
     remark: str | None = None
     is_alive: int | None = Field(default=None, ge=0, le=1)
@@ -51,6 +55,8 @@ class PersonResponse(BaseModel):
     birthplace: str | None
     phone: str | None = None
     address: str | None = None
+    address_lng: float | None = None
+    address_lat: float | None = None
     biography: str | None
     remark: str | None
     is_alive: int
@@ -59,6 +65,17 @@ class PersonResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ResidenceResponse(BaseModel):
+    id: int
+    name: str
+    nickname: str
+    address: str | None
+    longitude: float
+    latitude: float
+    generation: int | None
+
 
 
 class PersonListResponse(BaseModel):

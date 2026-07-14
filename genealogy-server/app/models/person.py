@@ -1,6 +1,7 @@
 from datetime import date, datetime
+from decimal import Decimal
 
-from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, SmallInteger, String, Text, func
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, Numeric, SmallInteger, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -23,6 +24,8 @@ class Person(Base):
     birthplace: Mapped[str | None] = mapped_column(String(100), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     address: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    address_lng: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    address_lat: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
     biography: Mapped[str | None] = mapped_column(Text, nullable=True)
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_alive: Mapped[int] = mapped_column(SmallInteger, default=1, nullable=False)
