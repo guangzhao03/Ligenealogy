@@ -7,7 +7,7 @@ from app.schemas.user import UserLogin, UserRegister
 from app.utils.exceptions import BadRequestException, ConflictException, UnauthorizedException
 
 
-from app.core.roles import ROLE_MEMBER
+from app.core.roles import ROLE_ADMIN, ROLE_MEMBER
 
 
 def register_user(db: Session, data: UserRegister) -> User:
@@ -15,11 +15,14 @@ def register_user(db: Session, data: UserRegister) -> User:
     if existing:
         raise ConflictException("用户名已存在")
 
+    # 约定：用户名 admin 注册时自动成为管理员
+    role = ROLE_ADMIN if data.username.strip().lower() == "admin" else ROLE_MEMBER
+
     user = User(
         username=data.username,
         password_hash=hash_password(data.password),
         nickname=data.nickname or data.username,
-        role=ROLE_MEMBER,
+        role=role,
     )
     db.add(user)
     db.commit()
