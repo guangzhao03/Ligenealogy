@@ -124,3 +124,6 @@ familytree/
 ## 贡献
 
 见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+
+## 未完成功能
+小程序端orAPP端，多人协作，宗族信息展示，显示搬迁动画，实景照片。
